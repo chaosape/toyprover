@@ -1,0 +1,8 @@
+(* -*- mode: tuareg; fill-column: 79; -*- *)
+#use "kernel.ml";;
+#use "derived.ml";;
+#use "prove.ml";;
+#use "tactic.ml";;
+#install_printer Kernel.print_tm;;
+#install_printer Kernel.print_thm;;
+#install_printer Prove.print_gt;;
