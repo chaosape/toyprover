@@ -3,8 +3,9 @@ open Set
 
 module type KERNEL = sig
 
-  type tm = Var  of string
-            |Imp of tm * tm
+  type tm = private 
+    Var  of string
+  | Imp of tm * tm
 
   type thm
 
@@ -19,6 +20,11 @@ module type KERNEL = sig
   val print_tm : Format.formatter -> tm -> unit
     
   val print_thm: Format.formatter -> thm -> unit
+
+  val imp : tm -> tm -> tm
+
+  val var : string -> tm
+
 
 end
 
@@ -53,20 +59,23 @@ module Kernel : KERNEL = struct
     match tm with
     | Var n -> Format.fprintf ppf "%s" n  
     | Imp (Imp _ as a, b) -> 
-      Format.fprintf ppf "@[%s%a%s %s@,%a@]"
+      Format.fprintf ppf "%s%a%s %s@,%a"
         "(" print_tm a  ")" "->" print_tm b 
     | Imp (a, b) -> 
-      Format.fprintf ppf "@[%a %s@ %a@]"
+      Format.fprintf ppf "%a %s@ %a"
        print_tm a "->" print_tm b 
 
   let print_thm ppf (tms,tm) =
     let rec aux ppf tms = 
       match tms with 
-      | [] -> Format.fprintf ppf " |- %a@]" print_tm tm
+      | [] -> Format.fprintf ppf " |- %a" print_tm tm
       | [tm'] -> Format.fprintf ppf "%a%a" print_tm tm' aux []
       | tm'::tms -> Format.fprintf ppf "%a,@ %a" print_tm tm' aux tms 
      in
-    Format.fprintf ppf "@[%a" aux (Tms.elements tms)
+    Format.fprintf ppf "%a" aux (Tms.elements tms)
 
+  let imp a b = Imp (a,b)
+    
+  let var s = Var s
 
 end
