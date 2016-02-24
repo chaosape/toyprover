@@ -5,9 +5,13 @@ module type PROVE  = sig
 
   type verifyfun = Kernel.thm list -> Kernel.thm
 
-  type tactic = goal -> goal list * verifyfun
+  type gt = 
+    Proved of Kernel.thm
+  | Partial of gt list * verifyfun
+  | Leaf of goal
+  | Invalid
 
-  type gt 
+  type tactic = goal -> gt * verifyfun
 
   (* Start a proof. *)
   val theorem : Kernel.thm list -> Kernel.thm -> unit 
@@ -38,33 +42,53 @@ module Prove = struct
   type verifyfun = Kernel.thm list -> Kernel.thm
 
   type tactic = goal -> goal list * verifyfun
-
-  type goaltree = 
-    Proved of Kernel.thm
-  | Node of goaltree list * verifyfun
-  | Leaf of goal
-  | Invalid
   
-  type gt = goaltree 
+  type gt = 
+    Proved of Kernel.thm
+  | Partial of gt list * verifyfun
+  | Unproved of goal
+  | Invalid
 
   let goaltree = ref Invalid
 
   let history = ref []
 
-  let from_tactic (thms,vf) = (List.map (fun x -> Leaf x) thms,vf)
+  let print_goal ppf (tms,tm) =
+    let rec aux ppf tms = 
+      match tms with 
+      | [] -> Format.fprintf ppf " |- %a" Kernel.print_tm tm
+      | [tm'] -> Format.fprintf ppf "%a%a" Kernel.print_tm tm' aux []
+      | tm'::tms -> Format.fprintf ppf "%a,@ %a" Kernel.print_tm tm' aux tms 
+     in
+    Format.fprintf ppf "%a" aux tms
+    
+  let print_gt ppf gt =
+    let rec aux ppf gt = 
+      match gt with 
+      | Proved thm -> Format.fprintf ppf "Have: %a@\n" Kernel.print_thm thm
+      | Unproved goal -> Format.fprintf ppf "Want: %a@\n" print_goal goal
+      | Partial ([],_) -> () 
+      | Partial (gt::gts,vf) -> 
+        Format.fprintf ppf "%a%a" aux gt aux (Partial (gts,vf))
+      | Invalid -> Format.fprintf ppf "Proof not in progress."
+    in
+    Format.fprintf ppf "State: @\n @[%a@]@." aux gt
 
   let theorem tms tm = 
     match !goaltree with
-    | Invalid -> goaltree := Leaf (tms,tm); history := []
+    | Invalid -> 
+      goaltree := Unproved (tms,tm); 
+      history := [];
+      print_gt Format.std_formatter (!goaltree)
     | _  -> failwith "prove: proof alread in progress."
   
   (* Apply a tactic to the left most goal in a goaltree list. *)
   let rec app_on_gts tac gts =
     match gts with 
     | [] -> raise Not_found
-    | (Node _ as b) :: bs ->
+    | (Partial _ as b) :: bs ->
       (try (app_on_gt tac b)::bs with | Not_found -> b::(app_on_gts tac bs))
-    | (Leaf _ as l) :: bs -> (app_on_gt tac l)::bs
+    | (Unproved _ as l) :: bs -> (app_on_gt tac l)::bs
     | (Proved _ as p)::bs -> p::(app_on_gts tac bs)
     | Invalid::_ -> failwith "app_on_gts: BUG - found invalid goal tree."
 
@@ -72,14 +96,14 @@ module Prove = struct
   and app_on_gt tac gt =
     match gt with 
     | Proved _ -> raise Not_found
-    | Leaf goal -> let gts,vf = from_tactic (tac goal) in Node (gts,vf)
-    | Node (gts,vf) -> Node (app_on_gts tac gts,vf)
+    | Unproved goal -> tac goal
+    | Partial (gts,vf) -> Partial (app_on_gts tac gts,vf)
     | Invalid -> failwith "app_on_gt: BUG - found invalid goal tree."
 
   (* Normalize a goaltree. *)
   let rec norm_gt gt = 
     match gt with  
-    | Node (gts,vf) ->
+    | Partial (gts,vf) ->
       (* Simplify sub-goals. *)
       let gts = List.map norm_gt gts in
       let is_proved = function | Proved _ -> true | _ -> false in 
@@ -90,7 +114,7 @@ module Prove = struct
       (* All sub-goals in a node are proved; apply verification function. *)
       if List.for_all is_proved gts then Proved (vf (List.map peel gts))
       (* O/w replace old node with a possible simplified node. *)
-      else Node (gts,vf)
+      else Partial (gts,vf)
     | Invalid -> failwith "norm_gt: BUG - found Invalid constructor."        
     | x -> x 
 
@@ -98,10 +122,13 @@ module Prove = struct
     match !goaltree with
     | Invalid -> failwith "apply: No proof in progress."
     | _ -> 
-      (* Backup current state. *)
-      history := !goaltree :: !history;
-      (* Try to apply the tactic. *)
-      try goaltree := norm_gt (app_on_gt tac !goaltree) with
+      try 
+        (* Backup current state. *)
+        history := !goaltree :: !history;
+        (* Try to apply the tactic. *)
+        goaltree := norm_gt (app_on_gt tac !goaltree) ;
+        print_gt Format.std_formatter (!goaltree)
+      with
       (* Not_found should only be raised when there is nothin left to prove. *)
       | Not_found -> failwith "apply: proof complete."
 
@@ -124,27 +151,6 @@ module Prove = struct
       history := history'
     | _ -> failwith "undo: at the beginning of the proof."
 
-  let print_goal ppf (tms,tm) =
-    let rec aux ppf tms = 
-      match tms with 
-      | [] -> Format.fprintf ppf " |- %a@]" Kernel.print_tm tm
-      | [tm'] -> Format.fprintf ppf "%a%a" Kernel.print_tm tm' aux []
-      | tm'::tms -> Format.fprintf ppf "%a,@ %a" Kernel.print_tm tm' aux tms 
-     in
-    Format.fprintf ppf "@[%a" aux tms
-    
-  let print_gt ppf gt =
-    let rec aux ppf gt = 
-      match gt with 
-      | Proved thm -> Format.fprintf ppf "Have: %a\n" Kernel.print_thm thm
-      | Leaf goal -> Format.fprintf ppf "Want: %a\n" print_goal goal
-      | Node ([],_) -> () 
-      | Node (gt::gts,vf) -> 
-        Format.fprintf ppf "%a%a" aux gt aux (Node (gts,vf))
-      | Invalid -> Format.fprintf ppf "Proof not in progress."
-    in
-    Format.fprintf ppf "\n%a" aux gt
-      
   let state () = !goaltree
 
 end
