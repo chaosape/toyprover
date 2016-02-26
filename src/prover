@@ -6,3 +6,7 @@
 #install_printer Kernel.print_tm;;
 #install_printer Kernel.print_thm;;
 #install_printer Prove.print_gt;;
+open Kernel;;
+open Prove;;
+open Tactic;;
+open Derived;;

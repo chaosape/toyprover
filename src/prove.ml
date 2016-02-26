@@ -6,9 +6,15 @@ module type PROVE  = sig
   type verifyfun = Kernel.thm list -> Kernel.thm
 
   type gt = 
-    Proved of Kernel.thm
-  | Partial of gt list * verifyfun
-  | Leaf of goal
+  (* Something proved. *)
+    Proved of Kernel.thm 
+  (* Something that can be proved if all goal trees can be
+     proved. *)
+  | Subgoals of gt list * verifyfun 
+  (* Something that has not been proved. *)
+  | Unproved of goal
+  (* An occurance of this constructor in the tree renders the
+     entire tree as invalid. *)
   | Invalid
 
   type tactic = goal -> gt * verifyfun
@@ -41,11 +47,9 @@ module Prove = struct
 
   type verifyfun = Kernel.thm list -> Kernel.thm
 
-  type tactic = goal -> goal list * verifyfun
-  
   type gt = 
     Proved of Kernel.thm
-  | Partial of gt list * verifyfun
+  | Subgoals of gt list * verifyfun
   | Unproved of goal
   | Invalid
 
@@ -67,9 +71,9 @@ module Prove = struct
       match gt with 
       | Proved thm -> Format.fprintf ppf "Have: %a@\n" Kernel.print_thm thm
       | Unproved goal -> Format.fprintf ppf "Want: %a@\n" print_goal goal
-      | Partial ([],_) -> () 
-      | Partial (gt::gts,vf) -> 
-        Format.fprintf ppf "%a%a" aux gt aux (Partial (gts,vf))
+      | Subgoals ([],_) -> () 
+      | Subgoals (gt::gts,vf) -> 
+        Format.fprintf ppf "%a%a" aux gt aux (Subgoals (gts,vf))
       | Invalid -> Format.fprintf ppf "Proof not in progress."
     in
     Format.fprintf ppf "State: @\n @[%a@]@." aux gt
@@ -86,7 +90,7 @@ module Prove = struct
   let rec app_on_gts tac gts =
     match gts with 
     | [] -> raise Not_found
-    | (Partial _ as b) :: bs ->
+    | (Subgoals _ as b) :: bs ->
       (try (app_on_gt tac b)::bs with | Not_found -> b::(app_on_gts tac bs))
     | (Unproved _ as l) :: bs -> (app_on_gt tac l)::bs
     | (Proved _ as p)::bs -> p::(app_on_gts tac bs)
@@ -97,13 +101,13 @@ module Prove = struct
     match gt with 
     | Proved _ -> raise Not_found
     | Unproved goal -> tac goal
-    | Partial (gts,vf) -> Partial (app_on_gts tac gts,vf)
+    | Subgoals (gts,vf) -> Subgoals (app_on_gts tac gts,vf)
     | Invalid -> failwith "app_on_gt: BUG - found invalid goal tree."
 
   (* Normalize a goaltree. *)
   let rec norm_gt gt = 
     match gt with  
-    | Partial (gts,vf) ->
+    | Subgoals (gts,vf) ->
       (* Simplify sub-goals. *)
       let gts = List.map norm_gt gts in
       let is_proved = function | Proved _ -> true | _ -> false in 
@@ -114,7 +118,7 @@ module Prove = struct
       (* All sub-goals in a node are proved; apply verification function. *)
       if List.for_all is_proved gts then Proved (vf (List.map peel gts))
       (* O/w replace old node with a possible simplified node. *)
-      else Partial (gts,vf)
+      else Subgoals (gts,vf)
     | Invalid -> failwith "norm_gt: BUG - found Invalid constructor."        
     | x -> x 
 

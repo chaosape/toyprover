@@ -59,7 +59,7 @@ module Kernel : KERNEL = struct
     match tm with
     | Var n -> Format.fprintf ppf "%s" n  
     | Imp (Imp _ as a, b) -> 
-      Format.fprintf ppf "%s%a%s %s@,%a"
+      Format.fprintf ppf "%s%a%s %s@ %a"
         "(" print_tm a  ")" "->" print_tm b 
     | Imp (a, b) -> 
       Format.fprintf ppf "%a %s@ %a"
