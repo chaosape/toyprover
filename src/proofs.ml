@@ -74,3 +74,35 @@ let wcomb =
              ; assume_tac ]);
     qed ()
   end
+
+let then_tac_test_1 = 
+  begin
+    theorem [] (imp av (imp av (imp av av)));
+    apply (then_tac (then_tac disch_tac disch_tac) disch_tac);
+    apply assume_tac;
+    qed ()
+  end
+
+let backchain_tac_test_1 =
+  begin
+    theorem [] (imp (imp av (imp bv cv)) (imp av (imp bv cv)));
+    apply (then_tac 
+             (repeat_tac disch_tac) 
+             (then_tac backchain_tac (repeat_tac assume_tac)));
+    qed ()
+  end
+
+let backchain_tac_test_2 =
+  begin
+    theorem [] (imp (imp av (imp bv cv)) (imp av (imp bv cv)));
+    apply search_tac;
+    qed ()
+  end
+
+
+let backchain_tac_test_3 =
+  begin
+    theorem [] (imp (imp av av) av);
+    apply search_tac;
+    qed ()
+  end
