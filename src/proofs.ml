@@ -99,10 +99,11 @@ let backchain_tac_test_2 =
     qed ()
   end
 
-
 let backchain_tac_test_3 =
   begin
-    theorem [] (imp (imp av av) av);
+    theorem [] (imp (imp (imp av bv) av) (imp (imp av bv) bv));
     apply search_tac;
     qed ()
   end
+
+

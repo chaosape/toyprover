@@ -67,19 +67,6 @@ module Tactic = struct
 
   let then_tac tac1 tac2 goal = on_all tac2 (tac1 goal)
 
-  let thenL_tac tac1 tacs goal = 
-    let aux = function
-      | Unproved goal ->
-        if length tacs == 1 then (hd tacs) goal
-        else tacfail "thenL_tac: incorrect number of tactics."
-      | Subgoals (gts,vf)  -> 
-        if length tacs == length gts
-        then Subgoals (map (fun (t,g) -> on_all t g) (combine tacs gts), vf)
-        else tacfail "thenL_tac: incorrect number of tactics."
-      | _ -> failwith "then_tac: BUG - found ill-formed subgoals."
-    in
-    aux (tac1 goal)
-
   let rec repeat_tac tac goal = try_tac (then_tac tac (repeat_tac tac)) goal
 
   let backchain_tac ?index:(i=0) (hyps,goal) = 
